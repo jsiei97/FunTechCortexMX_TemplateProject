@@ -2,7 +2,6 @@
 
 int main(int argc, char * argv[])
 {
-    char* target = TARGET;
-
+    while(1);
 }
 
