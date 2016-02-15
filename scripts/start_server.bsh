@@ -1,22 +1,61 @@
 #!/bin/bash 
 
-#cfg_path="/usr/share/openocd/scripts/"
-cfg_path="/usr/local/share/openocd/scripts/"
-cfg_port="res/openocd_ports.cfg"
-cfg_interface=$cfg_path"interface/olimex-arm-usb-ocd.cfg"
+#First a check if OpenOCD is installed.
+which openocd 
+if [ "$?" != "0" ]
+then
+    echo "OpenOCD is not in the path" 
+    exit 1
+fi
+
+#Then where is it installed? 
+if [ -d /usr/local/share/openocd/ ]
+then
+    echo "Using local openocd install"
+    cfg_path="/usr/local/share/openocd/scripts/"
+else
+    echo "Using the openocd package"
+    cfg_path="/usr/share/openocd/scripts/"
+fi
+
+
+#What jtag is connected?
+#Olimex jtag?
+lsusb -d 15ba:0003
+if [ "$?" == "0" ]
+then
+    echo "Found: ID 15ba:0003 Olimex Ltd. OpenOCD JTAG"
+    cfg_interface=$cfg_path"interface/ftdi/olimex-arm-usb-ocd.cfg"
+fi
+
+#Flyswatter jtag?
+lsusb -d 0403:6010
+if [ "$?" == "0" ]
+then
+    echo "Found: ID 0403:6010 Future Technology Devices International, Ltd FT2232C Dual USB-UART/FIFO IC"
+    cfg_interface=$cfg_path"interface/flyswatter.cfg"
+fi
+
+#And stop right here if we don't have one
+if [ "$cfg_interface" == "" ]
+then
+    echo "No jtag found"
+    exit 1
+fi
+
+
+# Then it is hard to guess what target we have connected to the jtag, 
+# so that is something you need to add yourself...
+
 #cfg_target=$cfg_path"target/lpc1768.cfg"
 #cfg_target=$cfg_path"target/stm32.cfg"
 cfg_target=$cfg_path"board/olimex_stm32_h103.cfg"
 
+
+# Then check so the different config files can be found on the system.
 if [ ! -d $cfg_path ] 
 then 
     echo "Error cfg_path" $cfg_path
-    exit 1
-fi
-
-if [ ! -f $cfg_port ] 
-then 
-    echo "Error cfg_port" $cfg_port
     exit 1
 fi
 
@@ -32,19 +71,33 @@ then
     exit 1
 fi
 
+# If the server is not running, then we start it.
 if [ `ps -A | grep openocd | wc -l` = 0 ]
 then
     echo "Start the OpenOCD server"
     #xterm -e "openocd -f res/openocd.cfg" &
 
-    xterm -e "openocd -f $cfg_port -f $cfg_interface -f $cfg_target -s $cfg_path" &
+    xterm -e "openocd -f $cfg_interface -f $cfg_target -s $cfg_path" &
+    #openocd -f $cfg_interface -f $cfg_target -s $cfg_path &
+    OpenOCD_pid=$!
+    echo "pid: "$OpenOCD_pid
 
     #openocd -f res/openocd.cfg --log_output log.OpenOCD.server &
 
+    # Then wait some time so OpenOCD has some time to configure the jtag.
     sleep 5
 fi
 
+#Did it start? 
+if [ `ps -A | grep openocd | wc -l` = 0 ]
+then
+    exit 1
+fi
+
+#Now let's disconnect him.
+disown $OpenOCD_pid
 
 # kill `ps -A | grep openocd | awk '{print $1}'`
 
+echo "OpenOCD should be running now."
 exit 0
